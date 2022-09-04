@@ -118,8 +118,9 @@ namespace asyncpp::uring {
 		constexpr size_t byte_size() const noexcept { return m_group->block_size(); }
 		constexpr void* get() const noexcept { return m_pointer; }
 		template<typename T>
-		requires std::is_trivial_v<T>
-		constexpr std::span<T> typed() const noexcept { return std::span<T>{static_cast<T*>(get()), byte_size() / sizeof(T)}; }
+		requires std::is_trivial_v<T> constexpr std::span<T> typed() const noexcept {
+			return std::span<T>{static_cast<T*>(get()), byte_size() / sizeof(T)};
+		}
 
 		void* release() noexcept;
 		void reset() noexcept;
@@ -215,15 +216,15 @@ namespace asyncpp::uring {
 		[[nodiscard]] io_uring_sqe* get_sqe() noexcept {
 			auto sqe = io_uring_get_sqe(&m_ring);
 			if (sqe == nullptr) [[unlikely]] {
-				// Submit queue is full, submit all existing ones and retry
-				io_uring_submit(&m_ring);
-				sqe = io_uring_get_sqe(&m_ring);
-			}
+					// Submit queue is full, submit all existing ones and retry
+					io_uring_submit(&m_ring);
+					sqe = io_uring_get_sqe(&m_ring);
+				}
 			if (sqe == nullptr) [[unlikely]] {
-				// If we reach this something is really really wrong....
-				std::cerr << "========== Failed to get a sqe after submit ==========" << std::endl;
-				std::terminate();
-			}
+					// If we reach this something is really really wrong....
+					std::cerr << "========== Failed to get a sqe after submit ==========" << std::endl;
+					std::terminate();
+				}
 			// Zero out the sqe to avoid dangling user_data
 			memset(sqe, 0, sizeof(*sqe));
 			return sqe;
