@@ -74,8 +74,9 @@ namespace asyncpp::uring {
 		constexpr size_t byte_size() const noexcept { return m_group->block_size(); }
 		constexpr void* get() const noexcept { return m_pointer; }
 		template<typename T>
-		requires std::is_trivial_v<T>
-		constexpr std::span<T> typed() const noexcept { return std::span<T>{static_cast<T*>(get()), byte_size() / sizeof(T)}; }
+		requires std::is_trivial_v<T> constexpr std::span<T> typed() const noexcept {
+			return std::span<T>{static_cast<T*>(get()), byte_size() / sizeof(T)};
+		}
 
 		void* release() noexcept;
 		void reset() noexcept;
@@ -294,15 +295,15 @@ namespace asyncpp::uring {
 		[[nodiscard]] io_uring_sqe* get_sqe() noexcept {
 			auto sqe = io_uring_get_sqe(&m_ring);
 			if (sqe == nullptr) [[unlikely]] {
-				// Submit queue is full, submit all existing ones and retry
-				io_uring_submit(&m_ring);
-				sqe = io_uring_get_sqe(&m_ring);
-			}
+					// Submit queue is full, submit all existing ones and retry
+					io_uring_submit(&m_ring);
+					sqe = io_uring_get_sqe(&m_ring);
+				}
 			if (sqe == nullptr) [[unlikely]] {
-				// If we reach this something is really really wrong....
-				std::cerr << "========== Failed to get a sqe after submit ==========" << std::endl;
-				std::terminate();
-			}
+					// If we reach this something is really really wrong....
+					std::cerr << "========== Failed to get a sqe after submit ==========" << std::endl;
+					std::terminate();
+				}
 			// Zero out the sqe to avoid dangling user_data
 			memset(sqe, 0, sizeof(*sqe));
 			return sqe;
@@ -700,11 +701,17 @@ namespace asyncpp::uring {
 			return do_call<&io_uring_prep_setxattr>(std::move(st), name, value, path, flags, len);
 		}
 		auto fgetxattr(int fd, const char* name, char* value, size_t len) noexcept { return do_call<&io_uring_prep_fgetxattr>(fd, name, value, len); }
-		auto fgetxattr(int fd, const char* name, char* value, size_t len, std::stop_token st) noexcept { return do_call<&io_uring_prep_fgetxattr>(std::move(st), fd, name, value, len); }
+		auto fgetxattr(int fd, const char* name, char* value, size_t len, std::stop_token st) noexcept {
+			return do_call<&io_uring_prep_fgetxattr>(std::move(st), fd, name, value, len);
+		}
 		auto getxattr(const char* name, char* value, const char* path, size_t len) noexcept { return do_call<&io_uring_prep_getxattr>(name, value, path, len); }
-		auto getxattr(const char* name, char* value, const char* path, size_t len, std::stop_token st) noexcept { return do_call<&io_uring_prep_getxattr>(std::move(st), name, value, path, len); }
+		auto getxattr(const char* name, char* value, const char* path, size_t len, std::stop_token st) noexcept {
+			return do_call<&io_uring_prep_getxattr>(std::move(st), name, value, path, len);
+		}
 		auto socket(int domain, int type, int protocol, unsigned int flags) noexcept { return do_call<&io_uring_prep_socket>(domain, type, protocol, flags); }
-		auto socket(int domain, int type, int protocol, unsigned int flags, std::stop_token st) noexcept { return do_call<&io_uring_prep_socket>(std::move(st), domain, type, protocol, flags); }
+		auto socket(int domain, int type, int protocol, unsigned int flags, std::stop_token st) noexcept {
+			return do_call<&io_uring_prep_socket>(std::move(st), domain, type, protocol, flags);
+		}
 		// TODO: io_uring_prep_uring_cmd
 
 	private:
@@ -778,7 +785,7 @@ namespace asyncpp::uring {
 	}
 
 	inline constexpr int sqe_awaitable<false, false>::await_resume() const noexcept { return m_service.current_cqe()->res; }
-	
+
 	inline void sqe_awaitable<true, false>::cancel_executor::operator()() noexcept {
 		auto sqe = that->m_service.get_sqe();
 		io_uring_prep_cancel(sqe, that->m_handle.address(), 0);
