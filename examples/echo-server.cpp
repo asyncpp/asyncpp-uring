@@ -23,9 +23,35 @@ task<> handle_connection(io_service& io, int socket, buffer_group& buffers) {
 }
 
 int main() {
+	std::stop_source exit;
 	io_service io;
+	io.launch([](io_service& io, std::stop_source& exit) -> task<> {
+		std::cout << "Server started, type \"help\" to get a list of commands or \"quit\" to shut down the server" << std::endl;
+		char buf[1024];
+		std::string line;
+		while (!exit.stop_requested()) {
+			auto res = co_await io.read(STDIN_FILENO, buf, sizeof(buf), 0);
+			if (res < 0) break;
+			for (int i = 0; i < res; i++) {
+				if (buf[i] == '\r') continue;
+				if (buf[i] != '\n') {
+					line += buf[i];
+					continue;
+				}
+				if (line == "quit" || line == "q")
+					exit.request_stop();
+				else if (line == "help") {
+					std::cout << "Valid commands:\n";
+					std::cout << "help    Show this help\n";
+					std::cout << "quit    Exit\n" << std::flush;
+				}
+				line.clear();
+			}
+		}
+		std::cout << "Exiting..." << std::endl;
+	}(io, exit));
 	buffer_group buffers{io, 32 * 1024, 32};
-	io.launch([](io_service& io, buffer_group& buffers) -> task<> {
+	io.launch([](io_service& io, buffer_group& buffers, std::stop_source& exit) -> task<> {
 		// Try create a socket and fallback to sync if unsupported
 		int sock = io.has_capability(IORING_OP_SOCKET)					//
 					   ? co_await io.socket(AF_INET, SOCK_STREAM, 0, 0) //
@@ -49,9 +75,10 @@ int main() {
 			std::cout << "failed to listen on socket: " << strerror(errno) << std::endl;
 			co_return;
 		}
-		while (auto new_con = co_await io.accept(sock, nullptr, nullptr, 0)) {
+		while (auto new_con = co_await io.accept(sock, nullptr, nullptr, 0, exit.get_token())) {
+			if (new_con < 0) break;
 			io.launch(handle_connection(io, new_con, buffers));
 		}
-	}(io, buffers));
+	}(io, buffers, exit));
 	io.run();
 }

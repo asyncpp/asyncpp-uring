@@ -1,5 +1,3 @@
-#include "asyncpp/scope_guard.h"
-#include <asm-generic/errno.h>
 #include <asyncpp/fire_and_forget.h>
 #include <asyncpp/uring/io_service.h>
 #include <chrono>
@@ -49,8 +47,7 @@ namespace {
 
 TEST(ASYNCPP_URING, IoServicePerformance) {
 	io_service io;
-	[](io_service& io) -> eager_fire_and_forget_task<> {
-		scope_guard guard([&io]() noexcept { io.signal_shutdown(); });
+	io.launch([](io_service& io) -> task<> {
 		for (size_t i = 0; i < num_prewarm; i++)
 			co_await io.nop();
 		{
@@ -59,7 +56,7 @@ TEST(ASYNCPP_URING, IoServicePerformance) {
 				co_await io.nop();
 		}
 		co_return;
-	}(io);
+	}(io));
 	io.run();
 }
 
@@ -97,23 +94,8 @@ TEST(ASYNCPP_URING, PlainPerformance) {
 TEST(ASYNCPP_URING, IoServiceDispatch) {
 	bool was_executed = false;
 	io_service io;
-	io.push([&]() {
-		was_executed = true;
-		io.push([&]() { io.signal_shutdown(); });
-	});
-	io.run();
-	ASSERT_TRUE(was_executed);
-}
-
-TEST(ASYNCPP_URING, IoServiceStopToken) {
-	bool was_executed = false;
-	std::stop_source source;
-	io_service io;
-	io.push([&]() {
-		was_executed = true;
-		source.request_stop();
-	});
-	io.run(source.get_token());
+	io.push([&]() { was_executed = true; });
+	io.run_once();
 	ASSERT_TRUE(was_executed);
 }
 
@@ -123,21 +105,20 @@ TEST(ASYNCPP_URING, IoServiceBufferGroup) {
 
 	io_service io;
 	buffer_group buffers{io, 16 * 1024, 128};
-	[](io_service& io, buffer_group& buffers, int write_fd, int read_fd) -> eager_fire_and_forget_task<> {
-		scope_guard guard([&io]() noexcept { io.signal_shutdown(); });
+	io.launch([](io_service& io, buffer_group& buffers, int write_fd, int read_fd) -> task<> {
 		{
-			auto res = co_await io.write(write_fd, "Hello", 5);
+			auto res = co_await io.write(write_fd, "Hello", 5, 0);
 			COASSERT_EQ(res, 5);
 		}
 		{
 			int res;
 			buffer_handle buf;
-			std::tie(res, buf) = co_await io.read(read_fd, buffers);
+			std::tie(res, buf) = co_await io.read(read_fd, buffers, 0);
 			COASSERT_EQ(res, 5);
 			COASSERT_EQ(memcmp(buf.get(), "Hello", 5), 0);
 		}
 		co_return;
-	}(io, buffers, fds[1], fds[0]);
+	}(io, buffers, fds[1], fds[0]));
 	io.run();
 }
 
@@ -147,33 +128,32 @@ TEST(ASYNCPP_URING, IoServiceBufferGroupENOBUFS) {
 
 	io_service io;
 	buffer_group buffers{io, 16 * 1024, 1};
-	[](io_service& io, buffer_group& buffers, int write_fd, int read_fd) -> eager_fire_and_forget_task<> {
-		scope_guard guard([&io]() noexcept { io.signal_shutdown(); });
+	io.launch([](io_service& io, buffer_group& buffers, int write_fd, int read_fd) -> task<> {
 		{
-			auto res = co_await io.write(write_fd, "Hello", 5);
+			auto res = co_await io.write(write_fd, "Hello", 5, 0);
 			COASSERT_EQ(res, 5);
 		}
 		{
 			int res;
 			buffer_handle buf;
-			std::tie(res, buf) = co_await io.read(read_fd, buffers);
+			std::tie(res, buf) = co_await io.read(read_fd, buffers, 0);
 			COASSERT_EQ(res, 5);
 			COASSERT_EQ(memcmp(buf.get(), "Hello", 5), 0);
 			// Don't readd the buffer
 			buf.release();
 		}
 		{
-			auto res = co_await io.write(write_fd, "Hello", 5);
+			auto res = co_await io.write(write_fd, "Hello", 5, 0);
 			COASSERT_EQ(res, 5);
 		}
 		{
 			int res;
 			buffer_handle buf;
-			std::tie(res, buf) = co_await io.read(read_fd, buffers);
+			std::tie(res, buf) = co_await io.read(read_fd, buffers, 0);
 			COASSERT_EQ(res, -ENOBUFS);
 			COASSERT_EQ(buf.get(), nullptr);
 		}
 		co_return;
-	}(io, buffers, fds[1], fds[0]);
+	}(io, buffers, fds[1], fds[0]));
 	io.run();
 }

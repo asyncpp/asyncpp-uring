@@ -58,7 +58,6 @@ int main() {
 		auto speed = ((static_cast<double>(sizeof(buf) * num_iterations) / dur.count()) * 1000) / 1024;
 		std::cout << "Done sending " << sizeof(buf) * num_iterations << " Byte in " << dur.count() << "ms (" << std::fixed << speed << "kB/s)" << std::endl;
 		co_await io.close(sock);
-		io.signal_shutdown();
 	}(io, buffers));
 	io.run();
 }
