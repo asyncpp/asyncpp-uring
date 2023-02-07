@@ -12,7 +12,7 @@ namespace asyncpp::uring {
 
 	public:
 		constexpr static struct {
-		} no_parse_tag;
+		} no_parse_tag{};
 		capability_set(struct io_uring* ring) : m_supported{} { this->parse(ring); }
 		capability_set() : m_supported{} { this->parse(nullptr); }
 		constexpr capability_set(decltype(no_parse_tag)) noexcept : m_supported{} {}
@@ -115,6 +115,8 @@ namespace asyncpp::uring {
 				"GETXATTR",
 				"SOCKET",
 				"URING_CMD",
+				"SEND_ZC",
+				"SENDMSG_ZC",
 			};
 
 			if (index >= (sizeof(names) / sizeof(names[0]))) return "";

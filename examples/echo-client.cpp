@@ -19,10 +19,14 @@ int main() {
 	io_service io{p};
 	buffer_group buffers{io, 32 * 1024, 32};
 	io.launch([](io_service& io, buffer_group& buffers) -> task<> {
-		// Try create a socket and fallback to sync if unsupported
+	// Try create a socket and fallback to sync if unsupported
+#if ASYNCPP_URING_OP_LAST >= 45
 		int sock = io.has_capability(IORING_OP_SOCKET)					//
 					   ? co_await io.socket(AF_INET, SOCK_STREAM, 0, 0) //
 					   : socket(AF_INET, SOCK_STREAM, 0);
+#else
+		int sock = socket(AF_INET, SOCK_STREAM, 0);
+#endif
 		if (sock < 0) {
 			std::cout << "failed to create socket: " << strerror(-sock) << std::endl;
 			co_return;
