@@ -9,10 +9,10 @@ if(HUNTER_ENABLED)
   # Workaround hunter hideing system libs
   set(HUNTER_LIBPATH $ENV{PKG_CONFIG_LIBDIR})
   unset(ENV{PKG_CONFIG_LIBDIR})
-  pkg_search_module(URING REQUIRED NO_CMAKE_PATH liburing>=2.3 uring>=2.3)
+  pkg_search_module(URING REQUIRED NO_CMAKE_PATH liburing uring)
   set(ENV{PKG_CONFIG_LIBDIR} ${HUNTER_LIBPATH})
 else()
-  pkg_search_module(URING REQUIRED NO_CMAKE_PATH liburing>=2.3 uring>=2.3)
+  pkg_search_module(URING REQUIRED NO_CMAKE_PATH liburing uring)
 endif()
 
 option(ASYNCPP_BUILD_TEST "Enable test builds" ON)
@@ -26,12 +26,19 @@ else()
   include(cmake/Fetch_asyncpp.cmake)
 endif()
 
+try_run(OP_LAST OP_LAST_COMPILE_RESULT SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/detect-max-op.c)
+
 add_library(asyncpp_uring INTERFACE)
 target_link_libraries(asyncpp_uring INTERFACE asyncpp Threads::Threads
                                               ${URING_LIBRARIES})
 target_include_directories(asyncpp_uring
                            INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(asyncpp_uring INTERFACE cxx_std_20)
+if(OP_LAST_COMPILE_RESULT)
+  target_compile_definitions(asyncpp_uring
+                             INTERFACE ASYNCPP_URING_OP_LAST=${OP_LAST})
+endif()
 
 if(ASYNCPP_BUILD_TEST)
   enable_testing()

@@ -65,6 +65,8 @@ namespace asyncpp::uring {
 			~bit_storage() noexcept { clear(); }
 
 			bit_storage(const bit_storage& other) : m_allocator{other.m_allocator} {
+				memset(&m_data, 0, sizeof(m_data));
+				m_data.inplace.size = 0x80;
 				resize_bits(other.bit_size());
 				memcpy(data(), other.data(), std::min(byte_size(), other.byte_size()));
 			}

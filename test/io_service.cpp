@@ -2,7 +2,9 @@
 #include <asyncpp/uring/io_service.h>
 #include <chrono>
 #include <cstdint>
+#include <fcntl.h>
 #include <gtest/gtest.h>
+#include <liburing.h>
 #include <ratio>
 #include <stop_token>
 
@@ -61,32 +63,31 @@ TEST(ASYNCPP_URING, IoServicePerformance) {
 }
 
 TEST(ASYNCPP_URING, PlainPerformance) {
-	io_service io;
+	io_uring ring;
+	ASSERT_EQ(io_uring_queue_init(8, &ring, 0), 0);
 	{
-		auto ring = io.raw_handle();
 		for (size_t i = 0; i < num_prewarm; i++) {
-			auto* sqe = io_uring_get_sqe(ring);
+			auto* sqe = io_uring_get_sqe(&ring);
 			io_uring_prep_nop(sqe);
-			io_uring_submit_and_wait(ring, 1);
+			io_uring_submit_and_wait(&ring, 1);
 
 			io_uring_cqe* cqe;
-			io_uring_peek_cqe(ring, &cqe);
+			io_uring_peek_cqe(&ring, &cqe);
 			(void)cqe->res;
-			io_uring_cqe_seen(ring, cqe);
+			io_uring_cqe_seen(&ring, cqe);
 		}
 	}
 	{
-		auto ring = io.raw_handle();
 		stopwatch sw{"plain", num_samples};
 		for (size_t i = 0; i < num_samples; i++) {
-			auto* sqe = io_uring_get_sqe(ring);
+			auto* sqe = io_uring_get_sqe(&ring);
 			io_uring_prep_nop(sqe);
-			io_uring_submit_and_wait(ring, 1);
+			io_uring_submit_and_wait(&ring, 1);
 
 			io_uring_cqe* cqe;
-			io_uring_peek_cqe(ring, &cqe);
+			io_uring_peek_cqe(&ring, &cqe);
 			(void)cqe->res;
-			io_uring_cqe_seen(ring, cqe);
+			io_uring_cqe_seen(&ring, cqe);
 		}
 	}
 }

@@ -19,21 +19,27 @@
 
 #include <iostream>
 
+#ifndef ASYNCPP_URING_OP_LAST
+#define ASYNCPP_URING_OP_LAST 48
+#endif
+
 namespace asyncpp::uring {
 	struct io_service;
-	class buffer_group;
-	class buffer_handle;
 
 	enum class ioseq_flag {
 		none = 0,
-		fixed_file = IOSQE_FIXED_FILE,
-		io_drain = IOSQE_IO_DRAIN,
-		io_link = IOSQE_IO_LINK,
-		io_hardlink = IOSQE_IO_HARDLINK,
-		async = IOSQE_ASYNC,
-		buffer_select = IOSQE_BUFFER_SELECT,
-		cqe_skip_success = IOSQE_CQE_SKIP_SUCCESS,
+		fixed_file = 1,
+		io_drain = 2,
+		io_link = 4,
+		io_hardlink = 8,
+		async = 16,
+		buffer_select = 32,
+		cqe_skip_success = 64,
 	};
+
+#if ASYNCPP_URING_OP_LAST >= 32
+	class buffer_group;
+	class buffer_handle;
 
 	class buffer_group {
 		io_service& m_service;
@@ -49,9 +55,9 @@ namespace asyncpp::uring {
 		buffer_group& operator=(const buffer_group&) = delete;
 		~buffer_group() noexcept;
 
-		uint16_t group_index() const noexcept { return m_group_index; }
-		size_t block_size() const noexcept { return m_block_size; }
-		size_t block_count() const noexcept { return m_block_count; }
+		constexpr uint16_t group_index() const noexcept { return m_group_index; }
+		constexpr size_t block_size() const noexcept { return m_block_size; }
+		constexpr size_t block_count() const noexcept { return m_block_count; }
 
 		void* ref_buffer(uint16_t buf) noexcept;
 		void unref_buffer(uint16_t buf) noexcept;
@@ -81,6 +87,7 @@ namespace asyncpp::uring {
 		void* release() noexcept;
 		void reset() noexcept;
 	};
+#endif
 
 	template<bool WithStopToken, bool WithBufferGroup>
 	struct sqe_awaitable;
@@ -141,6 +148,7 @@ namespace asyncpp::uring {
 		constexpr int await_resume() const noexcept;
 	};
 
+#if ASYNCPP_URING_OP_LAST >= 32
 	template<>
 	struct sqe_awaitable<false, true> {
 	private:
@@ -204,6 +212,7 @@ namespace asyncpp::uring {
 		}
 		std::pair<int, buffer_handle> await_resume() const noexcept;
 	};
+#endif
 
 	class uring {
 	public:
@@ -212,44 +221,45 @@ namespace asyncpp::uring {
 			io_uring_params m_params;
 
 		public:
-			params() : m_sqe_size{128}, m_params{} {}
-			params& sqe_size(unsigned int size) noexcept {
+			constexpr params() noexcept : m_sqe_size{128}, m_params{} {}
+			constexpr params& sqe_size(unsigned int size) noexcept {
 				m_sqe_size = size;
 				return *this;
 			}
-			params& cqe_size(unsigned int size) noexcept {
+			constexpr params& cqe_size(unsigned int size) noexcept {
 				m_params.cq_entries = size;
 				return enable_flags(IORING_SETUP_CQSIZE);
 			}
-			params& enable_flags(uint32_t flags) noexcept {
+			constexpr params& enable_flags(uint32_t flags) noexcept {
 				m_params.flags |= flags;
 				return *this;
 			}
-			params& disable_flags(uint32_t flags) noexcept {
+			constexpr params& disable_flags(uint32_t flags) noexcept {
 				m_params.flags &= ~flags;
 				return *this;
 			}
-			params& attach_wq(uint32_t wq_fd) noexcept {
+			constexpr params& attach_wq(uint32_t wq_fd) noexcept {
 				m_params.wq_fd = wq_fd;
 				return enable_flags(IORING_SETUP_ATTACH_WQ);
 			}
-			params& sq_affinity(uint32_t cpu) noexcept {
+			constexpr params& sq_affinity(uint32_t cpu) noexcept {
 				m_params.sq_thread_cpu = cpu;
 				return enable_flags(IORING_SETUP_SQ_AFF);
 			}
-			params& sq_poll(std::chrono::milliseconds timeout) noexcept {
+			constexpr params& sq_poll(std::chrono::milliseconds timeout) noexcept {
 				m_params.sq_thread_idle = timeout.count();
 				return enable_flags(IORING_SETUP_SQPOLL);
 			}
 
-			io_uring_params& raw() noexcept { return m_params; }
-			const io_uring_params& raw() const noexcept { return m_params; }
-			unsigned int sqe_size() const noexcept { return m_sqe_size; }
+			constexpr io_uring_params& raw() noexcept { return m_params; }
+			constexpr const io_uring_params& raw() const noexcept { return m_params; }
+			constexpr unsigned int sqe_size() const noexcept { return m_sqe_size; }
 		};
 
 		uring(const params& p = params{}) : m_ring{}, m_caps{capability_set::no_parse_tag}, m_params{p} {
 
 			auto res = io_uring_queue_init_params(m_params.sqe_size(), &m_ring, &m_params.raw());
+			//auto res = io_uring_queue_init(m_params.sqe_size(), &m_ring, 0);
 			if (res < 0) throw std::system_error(-res, std::system_category());
 
 			try {
@@ -296,7 +306,10 @@ namespace asyncpp::uring {
 			auto sqe = io_uring_get_sqe(&m_ring);
 			if (sqe == nullptr) [[unlikely]] {
 					// Submit queue is full, submit all existing ones and retry
-					io_uring_submit(&m_ring);
+					if (int res = io_uring_submit(&m_ring); res < 0) {
+						std::cerr << "========== Failed to submit sqe batch ==========\n" << strerror(-res) << std::endl;
+						std::terminate();
+					}
 					sqe = io_uring_get_sqe(&m_ring);
 				}
 			if (sqe == nullptr) [[unlikely]] {
@@ -380,7 +393,16 @@ namespace asyncpp::uring {
 		io_service(const params& params = io_service::params{}) //
 			: uring{params},									//
 			  m_dispatched_wake{eventfd(0, 0)},					//
-			  skip_success_flags{has_feature(IORING_FEAT_CQE_SKIP) ? ioseq_flag::cqe_skip_success : ioseq_flag::none} {
+#ifdef IORING_FEAT_CQE_SKIP
+			  skip_success_flags {
+			has_feature(IORING_FEAT_CQE_SKIP) ? ioseq_flag::cqe_skip_success : ioseq_flag::none
+		}
+#else
+			  skip_success_flags {
+			ioseq_flag::none
+		}
+#endif
+		{
 			set_null_cqe_handler([](const io_uring_cqe* cqe) {
 				if (cqe->res < 0) std::cerr << "Error on null sqe: " << cqe->res << " " << strerror(-cqe->res) << std::endl;
 			});
@@ -389,7 +411,7 @@ namespace asyncpp::uring {
 				const auto sqe = get_sqe();
 				memset(sqe, 0, sizeof(*sqe));
 				io_uring_prep_read(sqe, m_dispatched_wake, &m_dispatched_wake_value, sizeof(m_dispatched_wake_value), 0);
-				io_uring_sqe_set_data64(sqe, 1);
+				io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(1));
 				io_uring_submit(raw_handle());
 			}
 		}
@@ -432,7 +454,7 @@ namespace asyncpp::uring {
 			m_async_scope.launch<Awaitable, Allocator>(std::move(awaitable), std::move(allocator));
 		}
 
-		const struct io_uring_cqe* current_cqe() const noexcept { return m_current_cqe; }
+		constexpr const struct io_uring_cqe* current_cqe() const noexcept { return m_current_cqe; }
 
 		uint16_t allocate_buffer_group_index() { return m_buffer_idx.allocate_index(); }
 		void return_buffer_group_index(uint16_t idx) { m_buffer_idx.return_index(idx); }
@@ -468,6 +490,7 @@ namespace asyncpp::uring {
 			return sqe_awaitable<true, false>{*this, sqe, std::move(st)};
 		}
 
+#if ASYNCPP_URING_OP_LAST >= 32
 		/**
 		 * \brief Prepare a uring operation using the function passed using PrepareFN and returns an sqe_awaitable for it.
 		 * Associates a buffer_group for automatic buffer selection.
@@ -500,6 +523,7 @@ namespace asyncpp::uring {
 			PrepareFN(sqe, std::forward<Args>(args)...);
 			return sqe_awaitable<true, true>{*this, sqe, group, std::move(st)};
 		}
+#endif
 
 		auto nop() noexcept { return do_call<&io_uring_prep_nop>(); }
 		auto nop(std::stop_token st) noexcept { return do_call<&io_uring_prep_nop>(std::move(st)); }
@@ -532,8 +556,10 @@ namespace asyncpp::uring {
 		auto poll_add(int fd, short mask) noexcept { return do_call<&io_uring_prep_poll_add>(fd, mask); }
 		auto poll_add(int fd, short mask, std::stop_token st) noexcept { return do_call<&io_uring_prep_poll_add>(std::move(st), fd, mask); }
 		// TODO: How usefull is this ?
-		auto poll_remove(uint64_t udata) noexcept { return do_call<&io_uring_prep_poll_remove>(udata); }
-		auto poll_remove(uint64_t udata, std::stop_token st) noexcept { return do_call<&io_uring_prep_poll_remove>(std::move(st), udata); }
+		auto poll_remove(uint64_t udata) noexcept { return do_call<&io_uring_prep_poll_remove>(reinterpret_cast<void*>(udata)); }
+		auto poll_remove(uint64_t udata, std::stop_token st) noexcept {
+			return do_call<&io_uring_prep_poll_remove>(std::move(st), reinterpret_cast<void*>(udata));
+		}
 		auto sync_file_range(int fd, unsigned int len, uint64_t offset, int flags) noexcept {
 			return do_call<&io_uring_prep_sync_file_range>(fd, len, offset, flags);
 		}
@@ -596,12 +622,14 @@ namespace asyncpp::uring {
 		auto read(int fd, void* buf, unsigned nbytes, off_t offset, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_read>(std::move(st), fd, buf, nbytes, offset);
 		}
+#if ASYNCPP_URING_OP_LAST >= 32
 		auto read(int fd, buffer_group& buffers, off_t offset) noexcept {
 			return do_call<&io_uring_prep_read>(buffers, fd, nullptr, buffers.block_size(), offset);
 		}
 		auto read(int fd, buffer_group& buffers, off_t offset, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_read>(buffers, std::move(st), fd, nullptr, buffers.block_size(), offset);
 		}
+#endif
 		auto write(int fd, const void* buf, unsigned nbytes, off_t offset) noexcept { return do_call<&io_uring_prep_write>(fd, buf, nbytes, offset); }
 		auto write(int fd, const void* buf, unsigned nbytes, off_t offset, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_write>(std::move(st), fd, buf, nbytes, offset);
@@ -614,10 +642,13 @@ namespace asyncpp::uring {
 		auto madvise(void* addr, off_t length, int advice, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_madvise>(std::move(st), addr, length, advice);
 		}
+#if ASYNCPP_URING_OP_LAST >= 26
 		auto send(int sockfd, const void* buf, size_t len, int flags) noexcept { return do_call<&io_uring_prep_send>(sockfd, buf, len, flags); }
 		auto send(int sockfd, const void* buf, size_t len, int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_send>(std::move(st), sockfd, buf, len, flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 27
 		auto recv(int sockfd, void* buf, size_t len, int flags) noexcept { return do_call<&io_uring_prep_recv>(sockfd, buf, len, flags); }
 		auto recv(int sockfd, void* buf, size_t len, int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_recv>(std::move(st), sockfd, buf, len, flags);
@@ -628,90 +659,127 @@ namespace asyncpp::uring {
 		auto recv(int sockfd, buffer_group& buffers, int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_recv>(buffers, std::move(st), sockfd, nullptr, buffers.block_size(), flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 28
 		auto openat(int dfd, const char* path, struct open_how* how) noexcept { return do_call<&io_uring_prep_openat2>(dfd, path, how); }
 		auto openat(int dfd, const char* path, struct open_how* how, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_openat2>(std::move(st), dfd, path, how);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 29
 		auto epoll_ctl(int epfd, int fd, int op, struct epoll_event* ev) noexcept { return do_call<&io_uring_prep_epoll_ctl>(epfd, fd, op, ev); }
 		auto epoll_ctl(int epfd, int fd, int op, struct epoll_event* ev, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_epoll_ctl>(std::move(st), epfd, fd, op, ev);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 30
 		auto splice(int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned int nbytes, unsigned int splice_flags) noexcept {
 			return do_call<&io_uring_prep_splice>(fd_in, off_in, fd_out, off_out, nbytes, splice_flags);
 		}
 		auto splice(int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned int nbytes, unsigned int splice_flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_splice>(std::move(st), fd_in, off_in, fd_out, off_out, nbytes, splice_flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 31
 		auto provide_buffers(void* addr, int len, int nr, int bgid, int bid) noexcept {
 			return do_call<&io_uring_prep_provide_buffers>(addr, len, nr, bgid, bid);
 		}
 		auto provide_buffers(void* addr, int len, int nr, int bgid, int bid, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_provide_buffers>(std::move(st), addr, len, nr, bgid, bid);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 32
 		auto remove_buffers(int nr, int bgid) noexcept { return do_call<&io_uring_prep_remove_buffers>(nr, bgid); }
 		auto remove_buffers(int nr, int bgid, std::stop_token st) noexcept { return do_call<&io_uring_prep_remove_buffers>(std::move(st), nr, bgid); }
+#endif
+#if ASYNCPP_URING_OP_LAST >= 33
 		auto tee(int fd_in, int fd_out, unsigned int nbytes, unsigned int splice_flags) noexcept {
 			return do_call<&io_uring_prep_tee>(fd_in, fd_out, nbytes, splice_flags);
 		}
 		auto tee(int fd_in, int fd_out, unsigned int nbytes, unsigned int splice_flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_tee>(std::move(st), fd_in, fd_out, nbytes, splice_flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 34
 		auto shutdown(int fd, int how) noexcept { return do_call<&io_uring_prep_shutdown>(fd, how); }
 		auto shutdown(int fd, int how, std::stop_token st) noexcept { return do_call<&io_uring_prep_shutdown>(std::move(st), fd, how); }
+#endif
+#if ASYNCPP_URING_OP_LAST >= 35
 		auto renameat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags) noexcept {
 			return do_call<&io_uring_prep_renameat>(olddfd, oldpath, newdfd, newpath, flags);
 		}
 		auto renameat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_renameat>(std::move(st), olddfd, oldpath, newdfd, newpath, flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 36
 		auto unlinkat(int dfd, const char* path, int flags) noexcept { return do_call<&io_uring_prep_unlinkat>(dfd, path, flags); }
 		auto unlinkat(int dfd, const char* path, int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_unlinkat>(std::move(st), dfd, path, flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 37
 		auto mkdirat(int dfd, const char* path, mode_t mode) noexcept { return do_call<&io_uring_prep_mkdirat>(dfd, path, mode); }
 		auto mkdirat(int dfd, const char* path, mode_t mode, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_mkdirat>(std::move(st), dfd, path, mode);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 38
 		auto symlinkat(const char* target, int newdirfd, const char* linkpath) noexcept {
 			return do_call<&io_uring_prep_symlinkat>(target, newdirfd, linkpath);
 		}
 		auto symlinkat(const char* target, int newdirfd, const char* linkpath, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_symlinkat>(std::move(st), target, newdirfd, linkpath);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 39
 		auto linkat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags) noexcept {
 			return do_call<&io_uring_prep_linkat>(olddfd, oldpath, newdfd, newpath, flags);
 		}
 		auto linkat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_linkat>(std::move(st), olddfd, oldpath, newdfd, newpath, flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 40
 		auto msg_ring(int fd, unsigned int len, uint64_t data, unsigned int flags) noexcept { return do_call<&io_uring_prep_msg_ring>(fd, len, data, flags); }
 		auto msg_ring(int fd, unsigned int len, uint64_t data, unsigned int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_msg_ring>(std::move(st), fd, len, data, flags);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 41
 		auto fsetxattr(int fd, const char* name, const char* value, int flags, size_t len) noexcept {
 			return do_call<&io_uring_prep_fsetxattr>(fd, name, value, flags, len);
 		}
 		auto fsetxattr(int fd, const char* name, const char* value, int flags, size_t len, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_fsetxattr>(std::move(st), fd, name, value, flags, len);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 42
 		auto setxattr(const char* name, const char* value, const char* path, int flags, size_t len) noexcept {
 			return do_call<&io_uring_prep_setxattr>(name, value, path, flags, len);
 		}
 		auto setxattr(const char* name, const char* value, const char* path, int flags, size_t len, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_setxattr>(std::move(st), name, value, path, flags, len);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 43
 		auto fgetxattr(int fd, const char* name, char* value, size_t len) noexcept { return do_call<&io_uring_prep_fgetxattr>(fd, name, value, len); }
 		auto fgetxattr(int fd, const char* name, char* value, size_t len, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_fgetxattr>(std::move(st), fd, name, value, len);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 44
 		auto getxattr(const char* name, char* value, const char* path, size_t len) noexcept { return do_call<&io_uring_prep_getxattr>(name, value, path, len); }
 		auto getxattr(const char* name, char* value, const char* path, size_t len, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_getxattr>(std::move(st), name, value, path, len);
 		}
+#endif
+#if ASYNCPP_URING_OP_LAST >= 45
 		auto socket(int domain, int type, int protocol, unsigned int flags) noexcept { return do_call<&io_uring_prep_socket>(domain, type, protocol, flags); }
 		auto socket(int domain, int type, int protocol, unsigned int flags, std::stop_token st) noexcept {
 			return do_call<&io_uring_prep_socket>(std::move(st), domain, type, protocol, flags);
 		}
+#endif
 		// TODO: io_uring_prep_uring_cmd
 
 	private:
@@ -750,8 +818,8 @@ namespace asyncpp::uring {
 	inline bool io_service::handle_completions() noexcept {
 		unsigned head;
 		io_uring_for_each_cqe(raw_handle(), head, m_current_cqe) {
-			const auto data = io_uring_cqe_get_data64(m_current_cqe);
-			switch (data) {
+			const auto data = io_uring_cqe_get_data(m_current_cqe);
+			switch (reinterpret_cast<uintptr_t>(data)) {
 			case 0: {
 				if (m_handle_null_cqe) m_handle_null_cqe(m_current_cqe);
 				break;
@@ -766,7 +834,7 @@ namespace asyncpp::uring {
 				const auto sqe = get_sqe();
 				memset(sqe, 0, sizeof(*sqe));
 				io_uring_prep_read(sqe, m_dispatched_wake, &m_dispatched_wake_value, sizeof(m_dispatched_wake_value), 0);
-				io_uring_sqe_set_data64(sqe, 1);
+				io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(1));
 				io_uring_submit(raw_handle());
 				break;
 			}
@@ -786,6 +854,7 @@ namespace asyncpp::uring {
 
 	inline constexpr int sqe_awaitable<false, false>::await_resume() const noexcept { return m_service.current_cqe()->res; }
 
+#if ASYNCPP_URING_OP_LAST >= 32
 	inline void sqe_awaitable<true, false>::cancel_executor::operator()() noexcept {
 		auto sqe = that->m_service.get_sqe();
 		io_uring_prep_cancel(sqe, that->m_handle.address(), 0);
@@ -893,5 +962,5 @@ namespace asyncpp::uring {
 		m_buffer_index = 0;
 		m_pointer = nullptr;
 	}
-
+#endif
 } // namespace asyncpp::uring
