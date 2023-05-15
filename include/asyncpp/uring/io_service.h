@@ -4,6 +4,7 @@
 #include <asyncpp/launch.h>
 #include <asyncpp/task.h>
 #include <asyncpp/threadsafe_queue.h>
+#include <asyncpp/stop_token.h>
 #include <asyncpp/uring/capability_set.h>
 #include <asyncpp/uring/index_set.h>
 #include <liburing.h>
@@ -125,10 +126,10 @@ namespace asyncpp::uring {
 			sqe_awaitable* that;
 			void operator()() noexcept;
 		};
-		std::stop_callback<cancel_executor> m_stop_callback;
+		asyncpp::stop_callback<cancel_executor> m_stop_callback;
 
 	public:
-		sqe_awaitable(io_service& service, io_uring_sqe* sqe, std::stop_token token) noexcept
+		sqe_awaitable(io_service& service, io_uring_sqe* sqe, asyncpp::stop_token token) noexcept
 			: m_service{service}, m_sqe(sqe), m_handle{}, m_stop_callback{std::move(token), cancel_executor{this}} {}
 		sqe_awaitable(const sqe_awaitable& other) noexcept = delete;
 		sqe_awaitable& operator=(const sqe_awaitable& other) = delete;
@@ -187,10 +188,10 @@ namespace asyncpp::uring {
 			sqe_awaitable* that;
 			void operator()() noexcept;
 		};
-		std::stop_callback<cancel_executor> m_stop_callback;
+		asyncpp::stop_callback<cancel_executor> m_stop_callback;
 
 	public:
-		sqe_awaitable(io_service& service, io_uring_sqe* sqe, buffer_group& group, std::stop_token token) noexcept
+		sqe_awaitable(io_service& service, io_uring_sqe* sqe, buffer_group& group, asyncpp::stop_token token) noexcept
 			: m_service{service}, m_sqe{sqe}, m_group{group}, m_handle{}, m_stop_callback{std::move(token), cancel_executor{this}} {
 			m_sqe->flags |= static_cast<unsigned char>(ioseq_flag::buffer_select);
 			m_sqe->buf_group = m_group.group_index();
@@ -484,7 +485,7 @@ namespace asyncpp::uring {
 		 * \return sqe_awaitable 
 		 */
 		template<auto PrepareFN, typename... Args>
-		auto do_call(std::stop_token st, Args&&... args) noexcept {
+		auto do_call(asyncpp::stop_token st, Args&&... args) noexcept {
 			auto sqe = get_sqe();
 			PrepareFN(sqe, std::forward<Args>(args)...);
 			return sqe_awaitable<true, false>{*this, sqe, std::move(st)};
@@ -518,7 +519,7 @@ namespace asyncpp::uring {
 		 * \return sqe_awaitable 
 		 */
 		template<auto PrepareFN, typename... Args>
-		auto do_call(buffer_group& group, std::stop_token st, Args&&... args) noexcept {
+		auto do_call(buffer_group& group, asyncpp::stop_token st, Args&&... args) noexcept {
 			auto sqe = get_sqe();
 			PrepareFN(sqe, std::forward<Args>(args)...);
 			return sqe_awaitable<true, true>{*this, sqe, group, std::move(st)};
@@ -526,149 +527,149 @@ namespace asyncpp::uring {
 #endif
 
 		auto nop() noexcept { return do_call<&io_uring_prep_nop>(); }
-		auto nop(std::stop_token st) noexcept { return do_call<&io_uring_prep_nop>(std::move(st)); }
+		auto nop(asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_nop>(std::move(st)); }
 		auto readv(int fd, const struct iovec* iovecs, unsigned int nr_vecs, uint64_t offset) noexcept {
 			return do_call<&io_uring_prep_readv>(fd, iovecs, nr_vecs, offset);
 		}
-		auto readv(int fd, const struct iovec* iovecs, unsigned int nr_vecs, uint64_t offset, std::stop_token st) noexcept {
+		auto readv(int fd, const struct iovec* iovecs, unsigned int nr_vecs, uint64_t offset, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_readv>(std::move(st), fd, iovecs, nr_vecs, offset);
 		}
 		auto writev(int fd, const struct iovec* iovecs, unsigned int nr_vecs, uint64_t offset) noexcept {
 			return do_call<&io_uring_prep_writev>(fd, iovecs, nr_vecs, offset);
 		}
-		auto writev(int fd, const struct iovec* iovecs, unsigned int nr_vecs, uint64_t offset, std::stop_token st) noexcept {
+		auto writev(int fd, const struct iovec* iovecs, unsigned int nr_vecs, uint64_t offset, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_writev>(std::move(st), fd, iovecs, nr_vecs, offset);
 		}
 		auto fsync(int fd, unsigned int fsync_flags) noexcept { return do_call<&io_uring_prep_fsync>(fd, fsync_flags); }
-		auto fsync(int fd, unsigned int fsync_flags, std::stop_token st) noexcept { return do_call<&io_uring_prep_fsync>(std::move(st), fd, fsync_flags); }
+		auto fsync(int fd, unsigned int fsync_flags, asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_fsync>(std::move(st), fd, fsync_flags); }
 		auto read_fixed(int fd, void* buf, unsigned int nbytes, uint64_t offset, int buf_index) noexcept {
 			return do_call<&io_uring_prep_read_fixed>(fd, buf, nbytes, offset, buf_index);
 		}
-		auto read_fixed(int fd, void* buf, unsigned int nbytes, uint64_t offset, int buf_index, std::stop_token st) noexcept {
+		auto read_fixed(int fd, void* buf, unsigned int nbytes, uint64_t offset, int buf_index, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_read_fixed>(std::move(st), fd, buf, nbytes, offset, buf_index);
 		}
 		auto write_fixed(int fd, const void* buf, unsigned int nbytes, uint64_t offset, int buf_index) noexcept {
 			return do_call<&io_uring_prep_write_fixed>(fd, buf, nbytes, offset, buf_index);
 		}
-		auto write_fixed(int fd, const void* buf, unsigned int nbytes, uint64_t offset, int buf_index, std::stop_token st) noexcept {
+		auto write_fixed(int fd, const void* buf, unsigned int nbytes, uint64_t offset, int buf_index, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_write_fixed>(std::move(st), fd, buf, nbytes, offset, buf_index);
 		}
 		auto poll_add(int fd, short mask) noexcept { return do_call<&io_uring_prep_poll_add>(fd, mask); }
-		auto poll_add(int fd, short mask, std::stop_token st) noexcept { return do_call<&io_uring_prep_poll_add>(std::move(st), fd, mask); }
+		auto poll_add(int fd, short mask, asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_poll_add>(std::move(st), fd, mask); }
 		// TODO: How usefull is this ?
 		auto poll_remove(uint64_t udata) noexcept { return do_call<&io_uring_prep_poll_remove>(reinterpret_cast<void*>(udata)); }
-		auto poll_remove(uint64_t udata, std::stop_token st) noexcept {
+		auto poll_remove(uint64_t udata, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_poll_remove>(std::move(st), reinterpret_cast<void*>(udata));
 		}
 		auto sync_file_range(int fd, unsigned int len, uint64_t offset, int flags) noexcept {
 			return do_call<&io_uring_prep_sync_file_range>(fd, len, offset, flags);
 		}
-		auto sync_file_range(int fd, unsigned int len, uint64_t offset, int flags, std::stop_token st) noexcept {
+		auto sync_file_range(int fd, unsigned int len, uint64_t offset, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_sync_file_range>(std::move(st), fd, len, offset, flags);
 		}
 		auto sendmsg(int fd, const struct msghdr* msg, unsigned int flags) noexcept { return do_call<&io_uring_prep_sendmsg>(fd, msg, flags); }
-		auto sendmsg(int fd, const struct msghdr* msg, unsigned int flags, std::stop_token st) noexcept {
+		auto sendmsg(int fd, const struct msghdr* msg, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_sendmsg>(std::move(st), fd, msg, flags);
 		}
 		auto recvmsg(int fd, struct msghdr* msg, unsigned int flags) noexcept { return do_call<&io_uring_prep_recvmsg>(fd, msg, flags); }
-		auto recvmsg(int fd, struct msghdr* msg, unsigned int flags, std::stop_token st) noexcept {
+		auto recvmsg(int fd, struct msghdr* msg, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_recvmsg>(std::move(st), fd, msg, flags);
 		}
 		auto timeout(__kernel_timespec* ts, unsigned int count = 0, unsigned int flags = 0) noexcept {
 			return do_call<&io_uring_prep_timeout>(ts, count, flags);
 		}
-		auto timeout(__kernel_timespec* ts, unsigned int count, unsigned int flags, std::stop_token st) noexcept {
+		auto timeout(__kernel_timespec* ts, unsigned int count, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_timeout>(std::move(st), ts, count, flags);
 		}
 		// TODO: How usefull is this ?
 		auto timeout_remove(uint64_t udata, unsigned int flags) noexcept { return do_call<&io_uring_prep_timeout_remove>(udata, flags); }
 		// TODO: How usefull is this ?
-		auto timeout_remove(uint64_t udata, unsigned int flags, std::stop_token st) noexcept {
+		auto timeout_remove(uint64_t udata, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_timeout_remove>(std::move(st), udata, flags);
 		}
 		auto accept(int fd, struct sockaddr* addr, socklen_t* addrlen, int flags) noexcept { return do_call<&io_uring_prep_accept>(fd, addr, addrlen, flags); }
-		auto accept(int fd, struct sockaddr* addr, socklen_t* addrlen, int flags, std::stop_token st) noexcept {
+		auto accept(int fd, struct sockaddr* addr, socklen_t* addrlen, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_accept>(std::move(st), fd, addr, addrlen, flags);
 		}
 		auto link_timeout(struct __kernel_timespec* ts, unsigned int flags) noexcept { return do_call<&io_uring_prep_link_timeout>(ts, flags); }
-		auto link_timeout(struct __kernel_timespec* ts, unsigned int flags, std::stop_token st) noexcept {
+		auto link_timeout(struct __kernel_timespec* ts, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_link_timeout>(std::move(st), ts, flags);
 		}
 		auto connect(int fd, const struct sockaddr* addr, socklen_t addrlen) noexcept { return do_call<&io_uring_prep_connect>(fd, addr, addrlen); }
-		auto connect(int fd, const struct sockaddr* addr, socklen_t addrlen, std::stop_token st) noexcept {
+		auto connect(int fd, const struct sockaddr* addr, socklen_t addrlen, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_connect>(std::move(st), fd, addr, addrlen);
 		}
 		auto fallocate(int fd, int mode, off_t offset, off_t len) noexcept { return do_call<&io_uring_prep_fallocate>(fd, mode, offset, len); }
-		auto fallocate(int fd, int mode, off_t offset, off_t len, std::stop_token st) noexcept {
+		auto fallocate(int fd, int mode, off_t offset, off_t len, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_fallocate>(std::move(st), fd, mode, offset, len);
 		}
 		auto openat(int dfd, const char* path, int flags, mode_t mode) noexcept { return do_call<&io_uring_prep_openat>(dfd, path, flags, mode); }
-		auto openat(int dfd, const char* path, int flags, mode_t mode, std::stop_token st) noexcept {
+		auto openat(int dfd, const char* path, int flags, mode_t mode, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_openat>(std::move(st), dfd, path, flags, mode);
 		}
 		auto close(int fd) noexcept { return do_call<&io_uring_prep_close>(fd); }
-		auto close(int fd, std::stop_token st) noexcept { return do_call<&io_uring_prep_close>(std::move(st), fd); }
+		auto close(int fd, asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_close>(std::move(st), fd); }
 		auto files_update(int* fds, unsigned int nr_fds, int offset) noexcept { return do_call<&io_uring_prep_files_update>(fds, nr_fds, offset); }
-		auto files_update(int* fds, unsigned int nr_fds, int offset, std::stop_token st) noexcept {
+		auto files_update(int* fds, unsigned int nr_fds, int offset, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_files_update>(std::move(st), fds, nr_fds, offset);
 		}
 		auto statx(int dfd, const char* path, int flags, unsigned int mask, struct statx* statxbuf) noexcept {
 			return do_call<&io_uring_prep_statx>(dfd, path, flags, mask, statxbuf);
 		}
-		auto statx(int dfd, const char* path, int flags, unsigned int mask, struct statx* statxbuf, std::stop_token st) noexcept {
+		auto statx(int dfd, const char* path, int flags, unsigned int mask, struct statx* statxbuf, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_statx>(std::move(st), dfd, path, flags, mask, statxbuf);
 		}
 		auto read(int fd, void* buf, unsigned nbytes, off_t offset) noexcept { return do_call<&io_uring_prep_read>(fd, buf, nbytes, offset); }
-		auto read(int fd, void* buf, unsigned nbytes, off_t offset, std::stop_token st) noexcept {
+		auto read(int fd, void* buf, unsigned nbytes, off_t offset, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_read>(std::move(st), fd, buf, nbytes, offset);
 		}
 #if ASYNCPP_URING_OP_LAST >= 32
 		auto read(int fd, buffer_group& buffers, off_t offset) noexcept {
 			return do_call<&io_uring_prep_read>(buffers, fd, nullptr, buffers.block_size(), offset);
 		}
-		auto read(int fd, buffer_group& buffers, off_t offset, std::stop_token st) noexcept {
+		auto read(int fd, buffer_group& buffers, off_t offset, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_read>(buffers, std::move(st), fd, nullptr, buffers.block_size(), offset);
 		}
 #endif
 		auto write(int fd, const void* buf, unsigned nbytes, off_t offset) noexcept { return do_call<&io_uring_prep_write>(fd, buf, nbytes, offset); }
-		auto write(int fd, const void* buf, unsigned nbytes, off_t offset, std::stop_token st) noexcept {
+		auto write(int fd, const void* buf, unsigned nbytes, off_t offset, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_write>(std::move(st), fd, buf, nbytes, offset);
 		}
 		auto fadvise(int fd, uint64_t offset, off_t len, int advice) noexcept { return do_call<&io_uring_prep_fadvise>(fd, offset, len, advice); }
-		auto fadvise(int fd, uint64_t offset, off_t len, int advice, std::stop_token st) noexcept {
+		auto fadvise(int fd, uint64_t offset, off_t len, int advice, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_fadvise>(std::move(st), fd, offset, len, advice);
 		}
 		auto madvise(void* addr, off_t length, int advice) noexcept { return do_call<&io_uring_prep_madvise>(addr, length, advice); }
-		auto madvise(void* addr, off_t length, int advice, std::stop_token st) noexcept {
+		auto madvise(void* addr, off_t length, int advice, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_madvise>(std::move(st), addr, length, advice);
 		}
 #if ASYNCPP_URING_OP_LAST >= 26
 		auto send(int sockfd, const void* buf, size_t len, int flags) noexcept { return do_call<&io_uring_prep_send>(sockfd, buf, len, flags); }
-		auto send(int sockfd, const void* buf, size_t len, int flags, std::stop_token st) noexcept {
+		auto send(int sockfd, const void* buf, size_t len, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_send>(std::move(st), sockfd, buf, len, flags);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 27
 		auto recv(int sockfd, void* buf, size_t len, int flags) noexcept { return do_call<&io_uring_prep_recv>(sockfd, buf, len, flags); }
-		auto recv(int sockfd, void* buf, size_t len, int flags, std::stop_token st) noexcept {
+		auto recv(int sockfd, void* buf, size_t len, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_recv>(std::move(st), sockfd, buf, len, flags);
 		}
 		auto recv(int sockfd, buffer_group& buffers, int flags) noexcept {
 			return do_call<&io_uring_prep_recv>(buffers, sockfd, nullptr, buffers.block_size(), flags);
 		}
-		auto recv(int sockfd, buffer_group& buffers, int flags, std::stop_token st) noexcept {
+		auto recv(int sockfd, buffer_group& buffers, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_recv>(buffers, std::move(st), sockfd, nullptr, buffers.block_size(), flags);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 28
 		auto openat(int dfd, const char* path, struct open_how* how) noexcept { return do_call<&io_uring_prep_openat2>(dfd, path, how); }
-		auto openat(int dfd, const char* path, struct open_how* how, std::stop_token st) noexcept {
+		auto openat(int dfd, const char* path, struct open_how* how, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_openat2>(std::move(st), dfd, path, how);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 29
 		auto epoll_ctl(int epfd, int fd, int op, struct epoll_event* ev) noexcept { return do_call<&io_uring_prep_epoll_ctl>(epfd, fd, op, ev); }
-		auto epoll_ctl(int epfd, int fd, int op, struct epoll_event* ev, std::stop_token st) noexcept {
+		auto epoll_ctl(int epfd, int fd, int op, struct epoll_event* ev, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_epoll_ctl>(std::move(st), epfd, fd, op, ev);
 		}
 #endif
@@ -676,7 +677,7 @@ namespace asyncpp::uring {
 		auto splice(int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned int nbytes, unsigned int splice_flags) noexcept {
 			return do_call<&io_uring_prep_splice>(fd_in, off_in, fd_out, off_out, nbytes, splice_flags);
 		}
-		auto splice(int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned int nbytes, unsigned int splice_flags, std::stop_token st) noexcept {
+		auto splice(int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned int nbytes, unsigned int splice_flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_splice>(std::move(st), fd_in, off_in, fd_out, off_out, nbytes, splice_flags);
 		}
 #endif
@@ -684,43 +685,43 @@ namespace asyncpp::uring {
 		auto provide_buffers(void* addr, int len, int nr, int bgid, int bid) noexcept {
 			return do_call<&io_uring_prep_provide_buffers>(addr, len, nr, bgid, bid);
 		}
-		auto provide_buffers(void* addr, int len, int nr, int bgid, int bid, std::stop_token st) noexcept {
+		auto provide_buffers(void* addr, int len, int nr, int bgid, int bid, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_provide_buffers>(std::move(st), addr, len, nr, bgid, bid);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 32
 		auto remove_buffers(int nr, int bgid) noexcept { return do_call<&io_uring_prep_remove_buffers>(nr, bgid); }
-		auto remove_buffers(int nr, int bgid, std::stop_token st) noexcept { return do_call<&io_uring_prep_remove_buffers>(std::move(st), nr, bgid); }
+		auto remove_buffers(int nr, int bgid, asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_remove_buffers>(std::move(st), nr, bgid); }
 #endif
 #if ASYNCPP_URING_OP_LAST >= 33
 		auto tee(int fd_in, int fd_out, unsigned int nbytes, unsigned int splice_flags) noexcept {
 			return do_call<&io_uring_prep_tee>(fd_in, fd_out, nbytes, splice_flags);
 		}
-		auto tee(int fd_in, int fd_out, unsigned int nbytes, unsigned int splice_flags, std::stop_token st) noexcept {
+		auto tee(int fd_in, int fd_out, unsigned int nbytes, unsigned int splice_flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_tee>(std::move(st), fd_in, fd_out, nbytes, splice_flags);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 34
 		auto shutdown(int fd, int how) noexcept { return do_call<&io_uring_prep_shutdown>(fd, how); }
-		auto shutdown(int fd, int how, std::stop_token st) noexcept { return do_call<&io_uring_prep_shutdown>(std::move(st), fd, how); }
+		auto shutdown(int fd, int how, asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_shutdown>(std::move(st), fd, how); }
 #endif
 #if ASYNCPP_URING_OP_LAST >= 35
 		auto renameat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags) noexcept {
 			return do_call<&io_uring_prep_renameat>(olddfd, oldpath, newdfd, newpath, flags);
 		}
-		auto renameat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags, std::stop_token st) noexcept {
+		auto renameat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_renameat>(std::move(st), olddfd, oldpath, newdfd, newpath, flags);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 36
 		auto unlinkat(int dfd, const char* path, int flags) noexcept { return do_call<&io_uring_prep_unlinkat>(dfd, path, flags); }
-		auto unlinkat(int dfd, const char* path, int flags, std::stop_token st) noexcept {
+		auto unlinkat(int dfd, const char* path, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_unlinkat>(std::move(st), dfd, path, flags);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 37
 		auto mkdirat(int dfd, const char* path, mode_t mode) noexcept { return do_call<&io_uring_prep_mkdirat>(dfd, path, mode); }
-		auto mkdirat(int dfd, const char* path, mode_t mode, std::stop_token st) noexcept {
+		auto mkdirat(int dfd, const char* path, mode_t mode, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_mkdirat>(std::move(st), dfd, path, mode);
 		}
 #endif
@@ -728,7 +729,7 @@ namespace asyncpp::uring {
 		auto symlinkat(const char* target, int newdirfd, const char* linkpath) noexcept {
 			return do_call<&io_uring_prep_symlinkat>(target, newdirfd, linkpath);
 		}
-		auto symlinkat(const char* target, int newdirfd, const char* linkpath, std::stop_token st) noexcept {
+		auto symlinkat(const char* target, int newdirfd, const char* linkpath, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_symlinkat>(std::move(st), target, newdirfd, linkpath);
 		}
 #endif
@@ -736,13 +737,13 @@ namespace asyncpp::uring {
 		auto linkat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags) noexcept {
 			return do_call<&io_uring_prep_linkat>(olddfd, oldpath, newdfd, newpath, flags);
 		}
-		auto linkat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags, std::stop_token st) noexcept {
+		auto linkat(int olddfd, const char* oldpath, int newdfd, const char* newpath, int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_linkat>(std::move(st), olddfd, oldpath, newdfd, newpath, flags);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 40
 		auto msg_ring(int fd, unsigned int len, uint64_t data, unsigned int flags) noexcept { return do_call<&io_uring_prep_msg_ring>(fd, len, data, flags); }
-		auto msg_ring(int fd, unsigned int len, uint64_t data, unsigned int flags, std::stop_token st) noexcept {
+		auto msg_ring(int fd, unsigned int len, uint64_t data, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_msg_ring>(std::move(st), fd, len, data, flags);
 		}
 #endif
@@ -750,7 +751,7 @@ namespace asyncpp::uring {
 		auto fsetxattr(int fd, const char* name, const char* value, int flags, size_t len) noexcept {
 			return do_call<&io_uring_prep_fsetxattr>(fd, name, value, flags, len);
 		}
-		auto fsetxattr(int fd, const char* name, const char* value, int flags, size_t len, std::stop_token st) noexcept {
+		auto fsetxattr(int fd, const char* name, const char* value, int flags, size_t len, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_fsetxattr>(std::move(st), fd, name, value, flags, len);
 		}
 #endif
@@ -758,25 +759,25 @@ namespace asyncpp::uring {
 		auto setxattr(const char* name, const char* value, const char* path, int flags, size_t len) noexcept {
 			return do_call<&io_uring_prep_setxattr>(name, value, path, flags, len);
 		}
-		auto setxattr(const char* name, const char* value, const char* path, int flags, size_t len, std::stop_token st) noexcept {
+		auto setxattr(const char* name, const char* value, const char* path, int flags, size_t len, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_setxattr>(std::move(st), name, value, path, flags, len);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 43
 		auto fgetxattr(int fd, const char* name, char* value, size_t len) noexcept { return do_call<&io_uring_prep_fgetxattr>(fd, name, value, len); }
-		auto fgetxattr(int fd, const char* name, char* value, size_t len, std::stop_token st) noexcept {
+		auto fgetxattr(int fd, const char* name, char* value, size_t len, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_fgetxattr>(std::move(st), fd, name, value, len);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 44
 		auto getxattr(const char* name, char* value, const char* path, size_t len) noexcept { return do_call<&io_uring_prep_getxattr>(name, value, path, len); }
-		auto getxattr(const char* name, char* value, const char* path, size_t len, std::stop_token st) noexcept {
+		auto getxattr(const char* name, char* value, const char* path, size_t len, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_getxattr>(std::move(st), name, value, path, len);
 		}
 #endif
 #if ASYNCPP_URING_OP_LAST >= 45
 		auto socket(int domain, int type, int protocol, unsigned int flags) noexcept { return do_call<&io_uring_prep_socket>(domain, type, protocol, flags); }
-		auto socket(int domain, int type, int protocol, unsigned int flags, std::stop_token st) noexcept {
+		auto socket(int domain, int type, int protocol, unsigned int flags, asyncpp::stop_token st) noexcept {
 			return do_call<&io_uring_prep_socket>(std::move(st), domain, type, protocol, flags);
 		}
 #endif

@@ -6,7 +6,6 @@
 #include <gtest/gtest.h>
 #include <liburing.h>
 #include <ratio>
-#include <stop_token>
 
 using namespace asyncpp::uring;
 using namespace asyncpp;

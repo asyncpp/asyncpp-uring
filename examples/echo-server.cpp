@@ -23,9 +23,9 @@ task<> handle_connection(io_service& io, int socket, buffer_group& buffers) {
 }
 
 int main() {
-	std::stop_source exit;
+	asyncpp::stop_source exit;
 	io_service io;
-	io.launch([](io_service& io, std::stop_source& exit) -> task<> {
+	io.launch([](io_service& io, asyncpp::stop_source& exit) -> task<> {
 		std::cout << "Server started, type \"help\" to get a list of commands or \"quit\" to shut down the server" << std::endl;
 		char buf[1024];
 		std::string line;
@@ -51,7 +51,7 @@ int main() {
 		std::cout << "Exiting..." << std::endl;
 	}(io, exit));
 	buffer_group buffers{io, 32 * 1024, 32};
-	io.launch([](io_service& io, buffer_group& buffers, std::stop_source& exit) -> task<> {
+	io.launch([](io_service& io, buffer_group& buffers, asyncpp::stop_source& exit) -> task<> {
 	// Try create a socket and fallback to sync if unsupported
 #if ASYNCPP_URING_OP_LAST >= 45
 		int sock = io.has_capability(IORING_OP_SOCKET)					//
