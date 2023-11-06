@@ -7,6 +7,7 @@
 #include <asyncpp/stop_token.h>
 #include <asyncpp/uring/capability_set.h>
 #include <asyncpp/uring/index_set.h>
+
 #include <liburing.h>
 #include <liburing/io_uring.h>
 #include <mutex>
@@ -557,9 +558,13 @@ namespace asyncpp::uring {
 		auto poll_add(int fd, short mask) noexcept { return do_call<&io_uring_prep_poll_add>(fd, mask); }
 		auto poll_add(int fd, short mask, asyncpp::stop_token st) noexcept { return do_call<&io_uring_prep_poll_add>(std::move(st), fd, mask); }
 		// TODO: How usefull is this ?
-		auto poll_remove(uint64_t udata) noexcept { return do_call<&io_uring_prep_poll_remove>(reinterpret_cast<void*>(udata)); }
+		auto poll_remove(uint64_t udata) noexcept {
+			using udata_type = std::conditional_t<std::is_invocable_v<decltype(&io_uring_prep_poll_remove), io_uring_sqe*, uint64_t>, uint64_t, void*>;
+			return do_call<&io_uring_prep_poll_remove>(reinterpret_cast<udata_type>(udata));
+		}
 		auto poll_remove(uint64_t udata, asyncpp::stop_token st) noexcept {
-			return do_call<&io_uring_prep_poll_remove>(std::move(st), reinterpret_cast<void*>(udata));
+			using udata_type = std::conditional_t<std::is_invocable_v<decltype(&io_uring_prep_poll_remove), io_uring_sqe*, uint64_t>, uint64_t, void*>;
+			return do_call<&io_uring_prep_poll_remove>(std::move(st), reinterpret_cast<udata_type>(udata));
 		}
 		auto sync_file_range(int fd, unsigned int len, uint64_t offset, int flags) noexcept {
 			return do_call<&io_uring_prep_sync_file_range>(fd, len, offset, flags);
@@ -858,14 +863,16 @@ namespace asyncpp::uring {
 #if ASYNCPP_URING_OP_LAST >= 32
 	inline void sqe_awaitable<true, false>::cancel_executor::operator()() noexcept {
 		auto sqe = that->m_service.get_sqe();
-		io_uring_prep_cancel(sqe, that->m_handle.address(), 0);
+		using udata_type = std::conditional_t<std::is_invocable_v<decltype(&io_uring_prep_cancel), io_uring_sqe*, uint64_t, int>, uint64_t, void*>;
+		io_uring_prep_cancel(sqe, reinterpret_cast<udata_type>(that->m_handle.address()), 0);
 		io_uring_sqe_set_data(sqe, nullptr);
 		io_uring_sqe_set_flags(sqe, static_cast<unsigned char>(that->m_service.skip_success_flags));
 	}
 
 	inline void sqe_awaitable<true, true>::cancel_executor::operator()() noexcept {
 		auto sqe = that->m_service.get_sqe();
-		io_uring_prep_cancel(sqe, that->m_handle.address(), 0);
+		using udata_type = std::conditional_t<std::is_invocable_v<decltype(&io_uring_prep_cancel), io_uring_sqe*, uint64_t, int>, uint64_t, void*>;
+		io_uring_prep_cancel(sqe, reinterpret_cast<udata_type>(that->m_handle.address()), 0);
 		io_uring_sqe_set_data(sqe, nullptr);
 		io_uring_sqe_set_flags(sqe, static_cast<unsigned char>(that->m_service.skip_success_flags));
 	}
