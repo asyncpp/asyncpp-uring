@@ -2,9 +2,9 @@
 #include <asyncpp/detail/std_import.h>
 #include <asyncpp/dispatcher.h>
 #include <asyncpp/launch.h>
+#include <asyncpp/stop_token.h>
 #include <asyncpp/task.h>
 #include <asyncpp/threadsafe_queue.h>
-#include <asyncpp/stop_token.h>
 #include <asyncpp/uring/capability_set.h>
 #include <asyncpp/uring/index_set.h>
 
@@ -82,7 +82,8 @@ namespace asyncpp::uring {
 		constexpr size_t byte_size() const noexcept { return m_group->block_size(); }
 		constexpr void* get() const noexcept { return m_pointer; }
 		template<typename T>
-		requires std::is_trivial_v<T> constexpr std::span<T> typed() const noexcept {
+			requires std::is_trivial_v<T>
+		constexpr std::span<T> typed() const noexcept {
 			return std::span<T>{static_cast<T*>(get()), byte_size() / sizeof(T)};
 		}
 
@@ -307,18 +308,18 @@ namespace asyncpp::uring {
 		[[nodiscard]] io_uring_sqe* get_sqe() noexcept {
 			auto sqe = io_uring_get_sqe(&m_ring);
 			if (sqe == nullptr) [[unlikely]] {
-					// Submit queue is full, submit all existing ones and retry
-					if (int res = io_uring_submit(&m_ring); res < 0) {
-						std::cerr << "========== Failed to submit sqe batch ==========\n" << strerror(-res) << std::endl;
-						std::terminate();
-					}
-					sqe = io_uring_get_sqe(&m_ring);
-				}
-			if (sqe == nullptr) [[unlikely]] {
-					// If we reach this something is really really wrong....
-					std::cerr << "========== Failed to get a sqe after submit ==========" << std::endl;
+				// Submit queue is full, submit all existing ones and retry
+				if (int res = io_uring_submit(&m_ring); res < 0) {
+					std::cerr << "========== Failed to submit sqe batch ==========\n" << strerror(-res) << std::endl;
 					std::terminate();
 				}
+				sqe = io_uring_get_sqe(&m_ring);
+			}
+			if (sqe == nullptr) [[unlikely]] {
+				// If we reach this something is really really wrong....
+				std::cerr << "========== Failed to get a sqe after submit ==========" << std::endl;
+				std::terminate();
+			}
 			// Zero out the sqe to avoid dangling user_data
 			memset(sqe, 0, sizeof(*sqe));
 			return sqe;
@@ -396,13 +397,9 @@ namespace asyncpp::uring {
 			: uring{params},									//
 			  m_dispatched_wake{eventfd(0, 0)},					//
 #ifdef IORING_FEAT_CQE_SKIP
-			  skip_success_flags {
-			has_feature(IORING_FEAT_CQE_SKIP) ? ioseq_flag::cqe_skip_success : ioseq_flag::none
-		}
+			  skip_success_flags{has_feature(IORING_FEAT_CQE_SKIP) ? ioseq_flag::cqe_skip_success : ioseq_flag::none}
 #else
-			  skip_success_flags {
-			ioseq_flag::none
-		}
+			  skip_success_flags{ioseq_flag::none}
 #endif
 		{
 			set_null_cqe_handler([](const io_uring_cqe* cqe) {
