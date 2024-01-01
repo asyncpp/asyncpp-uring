@@ -39,6 +39,9 @@ if(OP_LAST_COMPILE_RESULT)
   target_compile_definitions(asyncpp_uring
                              INTERFACE ASYNCPP_URING_OP_LAST=${OP_LAST})
 endif()
+# mismatched-new-delete: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109224
+target_compile_options(asyncpp_uring INTERFACE -Wall -Wextra -Wpedantic -Werror
+                                               -Wno-error=mismatched-new-delete)
 
 if(ASYNCPP_BUILD_TEST)
   enable_testing()
