@@ -59,13 +59,13 @@ namespace asyncpp::uring {
 			static constexpr size_t bits_per_element = sizeof(element_type) * 8;
 
 			constexpr bit_storage(const Allocator& alloc = Allocator{}) noexcept : m_allocator{alloc} {
-				memset(&m_data, 0, sizeof(m_data));
+				m_data = {};
 				m_data.inplace.size = 0x80;
 			}
 			~bit_storage() noexcept { clear(); }
 
 			bit_storage(const bit_storage& other) : m_allocator{other.m_allocator} {
-				memset(&m_data, 0, sizeof(m_data));
+				m_data = {};
 				m_data.inplace.size = 0x80;
 				resize_bits(other.bit_size());
 				memcpy(data(), other.data(), std::min(byte_size(), other.byte_size()));
@@ -73,7 +73,7 @@ namespace asyncpp::uring {
 
 			bit_storage(bit_storage&& other) : m_allocator{std::move(other.m_allocator)} {
 				memcpy(&m_data, &other.m_data, sizeof(other.m_data));
-				memset(&other.m_data, 0, sizeof(other.m_data));
+				other.m_data = {};
 			}
 
 			bit_storage& operator=(const bit_storage& other) {
@@ -88,7 +88,7 @@ namespace asyncpp::uring {
 				this->clear();
 				m_allocator = std::move(other.m_allocator);
 				memcpy(&m_data, &other.m_data, sizeof(other.m_data));
-				memset(&other.m_data, 0, sizeof(other.m_data));
+				other.m_data = {};
 				return *this;
 			}
 
@@ -186,7 +186,6 @@ namespace asyncpp::uring {
 			return cnt;
 		}
 		T allocate_index() {
-			const element_type last_element_mask = (element_type{1} << (m_storage.bit_size() % bits_per_element)) - 1;
 			auto* data = m_storage.data();
 			const auto elements = bit_storage::num_elements(m_storage.bit_size());
 			bool found = false;

@@ -259,7 +259,7 @@ namespace asyncpp::uring {
 			constexpr unsigned int sqe_size() const noexcept { return m_sqe_size; }
 		};
 
-		uring(const params& p = params{}) : m_ring{}, m_caps{capability_set::no_parse_tag}, m_params{p} {
+		uring(const params& p = params{}) : m_params{p}, m_ring{}, m_caps{capability_set::no_parse_tag} {
 
 			auto res = io_uring_queue_init_params(m_params.sqe_size(), &m_ring, &m_params.raw());
 			//auto res = io_uring_queue_init(m_params.sqe_size(), &m_ring, 0);
@@ -395,12 +395,12 @@ namespace asyncpp::uring {
 
 		io_service(const params& params = io_service::params{}) //
 			: uring{params},									//
-			  m_dispatched_wake{eventfd(0, 0)},					//
 #ifdef IORING_FEAT_CQE_SKIP
-			  skip_success_flags{has_feature(IORING_FEAT_CQE_SKIP) ? ioseq_flag::cqe_skip_success : ioseq_flag::none}
+			  skip_success_flags{has_feature(IORING_FEAT_CQE_SKIP) ? ioseq_flag::cqe_skip_success : ioseq_flag::none},
 #else
-			  skip_success_flags{ioseq_flag::none}
+			  skip_success_flags{ioseq_flag::none},
 #endif
+			  m_dispatched_wake{eventfd(0, 0)} //
 		{
 			set_null_cqe_handler([](const io_uring_cqe* cqe) {
 				if (cqe->res < 0) std::cerr << "Error on null sqe: " << cqe->res << " " << strerror(-cqe->res) << std::endl;
@@ -881,7 +881,7 @@ namespace asyncpp::uring {
 		buffer_handle ptr;
 		if (cqe->flags & IORING_CQE_F_BUFFER) {
 			auto bufidx = cqe->flags >> IORING_CQE_BUFFER_SHIFT;
-			assert(cqe->res <= m_group.block_size());
+			assert(cqe->res <= static_cast<long>(m_group.block_size()));
 			ptr = buffer_handle(m_group, bufidx);
 		}
 		return {cqe->res, ptr};
@@ -892,7 +892,7 @@ namespace asyncpp::uring {
 		buffer_handle ptr;
 		if (cqe->flags & IORING_CQE_F_BUFFER) {
 			auto bufidx = cqe->flags >> IORING_CQE_BUFFER_SHIFT;
-			assert(cqe->res <= m_group.block_size());
+			assert(cqe->res <= static_cast<long>(m_group.block_size()));
 			ptr = buffer_handle(m_group, bufidx);
 		}
 		return {cqe->res, ptr};
