@@ -1,5 +1,5 @@
-#include <asyncpp/uring/index_set.h>
 #include <asyncpp/fire_and_forget.h>
+#include <asyncpp/uring/index_set.h>
 #include <asyncpp/uring/io_service.h>
 #include <cstddef>
 #include <cstdint>

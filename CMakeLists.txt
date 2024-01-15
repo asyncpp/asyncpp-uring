@@ -41,13 +41,17 @@ if(OP_LAST_COMPILE_RESULT)
 endif()
 # mismatched-new-delete: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109224
 target_compile_options(asyncpp_uring INTERFACE -Wall -Wextra -Wpedantic)
-# Clang10 does not know about likely/unlikely macros, however since those are only hints we just disable the warning
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11.0)
+# Clang10 does not know about likely/unlikely macros, however since those are
+# only hints we just disable the warning
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION
+                                              VERSION_LESS 12.0)
   target_compile_options(asyncpp_uring INTERFACE -Wno-error=unknown-attributes)
 endif()
 # G++10 does not know about Wmismatched-new-delete
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 11.0)
-  target_compile_options(asyncpp_uring INTERFACE -Wno-error=mismatched-new-delete)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION
+                                            VERSION_GREATER 11.0)
+  target_compile_options(asyncpp_uring
+                         INTERFACE -Wno-error=mismatched-new-delete)
 endif()
 if(ASYNCPP_BUILD_TEST)
   enable_testing()
