@@ -58,7 +58,7 @@ jobs:
           sudo apt install -y --no-install-recommends libc6-dev wget
           wget http://de.archive.ubuntu.com/ubuntu/pool/main/libu/liburing/liburing2_2.1-2build1_amd64.deb
           wget http://de.archive.ubuntu.com/ubuntu/pool/main/libu/liburing/liburing-dev_2.1-2build1_amd64.deb
-          dpkg -i liburing*.deb
+          sudo dpkg -i liburing*.deb
           rm liburing*.deb
       - name: Install gtest
         uses: ./.github/actions/install/gtest
