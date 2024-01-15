@@ -63,13 +63,12 @@ jobs:
       - name: Install gtest
         uses: ./.github/actions/install/gtest
       - name: Configure
-        if: contains(matrix.compiler.runs-on, 'ubuntu')
         run: cmake -S. -Bbuild -DASYNCPP_BUILD_TEST=ON -DASYNCPP_WITH_ASAN=ON -DASYNCPP_WITH_TSAN=OFF
       - name: Build
         run: cmake --build build --config Debug
       - name: Test
         working-directory: ${{ github.workspace }}/build
-        run: ./asyncpp-test
+        run: ./asyncpp_uring-test
       - name: Update Result
         id: status
         if: ${{ always() }}
