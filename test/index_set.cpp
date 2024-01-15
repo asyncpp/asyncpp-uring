@@ -1,12 +1,10 @@
-#include "asyncpp/uring/index_set.h"
 #include <asyncpp/fire_and_forget.h>
+#include <asyncpp/uring/index_set.h>
 #include <asyncpp/uring/io_service.h>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
-#include <ratio>
 #include <stdexcept>
 #include <sys/types.h>
 
@@ -122,8 +120,8 @@ TEST(ASYNCPP_URING, IndexSetCopy) {
 TEST(ASYNCPP_URING, IndexSetSBO) {
 	struct fail_allocator {
 		using value_type = uint64_t;
-		void deallocate(uint64_t* p, std::size_t n) { throw std::logic_error("attempt to deallocate"); }
-		[[nodiscard]] uint64_t* allocate(std::size_t n) { throw std::logic_error("attempt to allocate"); }
+		void deallocate([[maybe_unused]] uint64_t* p, [[maybe_unused]] std::size_t n) { throw std::logic_error("attempt to deallocate"); }
+		[[nodiscard]] uint64_t* allocate([[maybe_unused]] std::size_t n) { throw std::logic_error("attempt to allocate"); }
 	};
 	index_set<uint16_t, fail_allocator> set{};
 	for (size_t i = 0; i <= 16; i++) {
